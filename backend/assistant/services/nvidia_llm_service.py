@@ -61,7 +61,7 @@ class NvidiaLlmService:
 
     @classmethod
     def get_model(cls):
-        return getattr(settings, 'NVIDIA_LLM_MODEL', 'meta/llama-3.3-70b-instruct')
+        return getattr(settings, 'NVIDIA_LLM_MODEL', 'nvidia/nemotron-3.5-bolt-e4b')
 
     @classmethod
     def chat(cls, messages, current_time_str="2026-11-16 21:45"):
