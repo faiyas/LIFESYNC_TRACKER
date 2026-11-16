@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load .env file
+# Load .env file (checks project directory, home directory, and environment)
 load_dotenv(BASE_DIR / '.env')
+load_dotenv(Path.home() / '.env')
+load_dotenv()
 
 # Security settings
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-lifesync-ai-secret-key-123456')
@@ -111,6 +113,6 @@ CORS_ALLOW_HEADERS = ['*']
 CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 
 # NVIDIA NIM Configurations
-NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY', '')
-NVIDIA_LLM_MODEL = os.getenv('NVIDIA_LLM_MODEL', 'meta/llama-3.3-70b-instruct')
+NVIDIA_API_KEY = os.getenv('NVIDIA_API_KEY', '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')
+NVIDIA_LLM_MODEL = os.getenv('NVIDIA_LLM_MODEL', 'nvidia/nemotron-3.5-bolt-e4b')
 NVIDIA_IMAGE_MODEL = os.getenv('NVIDIA_IMAGE_MODEL', 'stabilityai/stable-diffusion-3-medium')

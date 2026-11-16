@@ -103,8 +103,10 @@ class NvidiaLlmService:
                         return choices[0].get("message", {}).get("content", "")
                 else:
                     logger.error(f"NVIDIA API Error {response.status_code}: {response.text}")
+                    return f"NVIDIA API returned status {response.status_code}. Please check your NVIDIA account credits."
             except Exception as e:
                 logger.error(f"NVIDIA API Connection Exception: {e}")
+                return f"Could not reach NVIDIA API: {e}"
 
         # 2. Free Intelligent Fallback (Ensures the assistant ALWAYS works even before adding an API key)
         return cls._intelligent_fallback_response(messages[-1].get("content", ""), current_time_str)
