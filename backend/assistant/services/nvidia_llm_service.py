@@ -95,6 +95,11 @@ class NvidiaLlmService:
                     data = response.json()
                     choices = data.get("choices", [])
                     if choices:
+                        try:
+                            from ..models import ApiUsageTracker
+                            ApiUsageTracker.record_nvidia_call()
+                        except Exception:
+                            pass
                         return choices[0].get("message", {}).get("content", "")
                 else:
                     logger.error(f"NVIDIA API Error {response.status_code}: {response.text}")

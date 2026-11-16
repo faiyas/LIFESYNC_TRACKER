@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.utils import timezone
 
 class ConversationSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -41,7 +42,44 @@ class GeneratedImageRecord(models.Model):
     prompt = models.TextField()
     image_url = models.URLField(max_length=1000, blank=True, null=True)
     image_file = models.ImageField(upload_to='generated_images/', blank=True, null=True)
+    mode = models.CharField(max_length=50, default='text2img') # text2img, img2img, rembg
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Image: {self.prompt[:40]} ({self.created_at})"
+
+class ApiUsageTracker(models.Model):
+    date = models.DateField(default=timezone.now, unique=True)
+    nvidia_calls = models.IntegerField(default=0)
+    image_calls = models.IntegerField(default=0)
+    last_called_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def record_nvidia_call(cls):
+        today = timezone.now().date()
+        obj, _ = cls.objects.get_or_create(date=today)
+        obj.nvidia_calls += 1
+        obj.save(update_fields=['nvidia_calls', 'last_called_at'])
+        return obj
+
+    @classmethod
+    def record_image_call(cls):
+        today = timezone.now().date()
+        obj, _ = cls.objects.get_or_create(date=today)
+        obj.image_calls += 1
+        obj.save(update_fields=['image_calls', 'last_called_at'])
+        return obj
+
+    @classmethod
+    def get_today_stats(cls):
+        today = timezone.now().date()
+        obj, _ = cls.objects.get_or_create(date=today)
+        remaining = max(0, 1000 - obj.nvidia_calls)
+        return {
+            "date": str(today),
+            "nvidia_used": obj.nvidia_calls,
+            "nvidia_limit": 1000,
+            "nvidia_remaining": remaining,
+            "image_generated_today": obj.image_calls,
+            "image_limit": "Unlimited (Free)",
+        }
