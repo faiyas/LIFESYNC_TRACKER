@@ -26,7 +26,7 @@ class AiBackendResponse {
 
 class AiBackendClient {
   static const String _prefBackendUrlKey = 'ai_assistant_backend_url';
-  static const String _defaultUrl = 'http://10.0.2.2:8000'; // Default for Android emulator
+  static const String _defaultUrl = 'https://compliance-light-delhi-euros.trycloudflare.com';
 
   static final AiBackendClient instance = AiBackendClient._internal();
   String _backendUrl = _defaultUrl;
