@@ -10,6 +10,8 @@ class AiMessage {
   final String? actionType; // 'reminder', 'expense', 'income', 'image'
   final Map<String, dynamic>? actionPayload;
   final String? imageUrl;
+  final String? base64Data;
+  final String? referenceImagePath;
   final bool isExecuted;
   final String? executionStatus;
   final bool isLoading;
@@ -22,6 +24,8 @@ class AiMessage {
     this.actionType,
     this.actionPayload,
     this.imageUrl,
+    this.base64Data,
+    this.referenceImagePath,
     this.isExecuted = false,
     this.executionStatus,
     this.isLoading = false,
@@ -36,6 +40,8 @@ class AiMessage {
     String? actionType,
     Map<String, dynamic>? actionPayload,
     String? imageUrl,
+    String? base64Data,
+    String? referenceImagePath,
     bool? isExecuted,
     String? executionStatus,
     bool? isLoading,
@@ -48,6 +54,8 @@ class AiMessage {
       actionType: actionType ?? this.actionType,
       actionPayload: actionPayload ?? this.actionPayload,
       imageUrl: imageUrl ?? this.imageUrl,
+      base64Data: base64Data ?? this.base64Data,
+      referenceImagePath: referenceImagePath ?? this.referenceImagePath,
       isExecuted: isExecuted ?? this.isExecuted,
       executionStatus: executionStatus ?? this.executionStatus,
       isLoading: isLoading ?? this.isLoading,

@@ -10,7 +10,9 @@ class AiBackendResponse {
   final String? actionType;
   final Map<String, dynamic>? actionPayload;
   final String? imageUrl;
+  final String? base64Data;
   final String? sessionId;
+  final Map<String, dynamic>? credits;
   final String? errorMessage;
 
   AiBackendResponse({
@@ -19,7 +21,9 @@ class AiBackendResponse {
     this.actionType,
     this.actionPayload,
     this.imageUrl,
+    this.base64Data,
     this.sessionId,
+    this.credits,
     this.errorMessage,
   });
 }
@@ -66,7 +70,7 @@ class AiBackendClient {
   Future<Map<String, dynamic>> checkHealth() async {
     try {
       final uri = Uri.parse('$_backendUrl/api/health/');
-      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         return {
           'online': true,
@@ -83,6 +87,21 @@ class AiBackendClient {
         'error': e.toString(),
       };
     }
+  }
+
+  /// Fetches real-time available credits from the backend
+  Future<Map<String, dynamic>?> getCredits() async {
+    try {
+      final uri = Uri.parse('$_backendUrl/api/assistant/credits/');
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['credits'] as Map<String, dynamic>?;
+      }
+    } catch (e) {
+      debugPrint('Error fetching credits: $e');
+    }
+    return null;
   }
 
   /// Sends a chat message to NVIDIA LLM Django Backend
@@ -104,7 +123,7 @@ class AiBackendClient {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: body,
-      ).timeout(const Duration(seconds: 25));
+      ).timeout(const Duration(seconds: 35));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -114,7 +133,9 @@ class AiBackendClient {
           actionType: data['action_type'] as String?,
           actionPayload: data['action_payload'] as Map<String, dynamic>?,
           imageUrl: data['image_url'] as String?,
+          base64Data: data['base64_data'] as String?,
           sessionId: data['session_id'] as String?,
+          credits: data['credits'] as Map<String, dynamic>?,
         );
       } else {
         return AiBackendResponse(
@@ -138,12 +159,42 @@ class AiBackendClient {
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'prompt': prompt}),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 40));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       } else {
         return {'status': 'error', 'message': 'HTTP ${response.statusCode}'};
+      }
+    } catch (e) {
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  /// Reference Image Editing & Background Removal
+  Future<Map<String, dynamic>> editImage({
+    required String imageBase64,
+    required String prompt,
+    String mode = 'edit', // 'rembg' or 'edit' or 'blend'
+  }) async {
+    try {
+      final uri = Uri.parse('$_backendUrl/api/assistant/edit-image/');
+      final body = jsonEncode({
+        'image': imageBase64,
+        'prompt': prompt,
+        'mode': mode,
+      });
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: body,
+      ).timeout(const Duration(seconds: 45));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        return {'status': 'error', 'message': 'HTTP ${response.statusCode}: ${response.body}'};
       }
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
