@@ -42,7 +42,7 @@ class GeneratedImageRecord(models.Model):
     prompt = models.TextField()
     image_url = models.URLField(max_length=1000, blank=True, null=True)
     image_file = models.ImageField(upload_to='generated_images/', blank=True, null=True)
-    mode = models.CharField(max_length=50, default='text2img') # text2img, img2img, rembg
+    mode = models.CharField(max_length=50, default='text2img')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -83,3 +83,37 @@ class ApiUsageTracker(models.Model):
             "image_generated_today": obj.image_calls,
             "image_limit": "Unlimited (Free)",
         }
+
+class DeviceProfile(models.Model):
+    """Identifies unique client phone/device for cloud backups without login requirements."""
+    device_id = models.CharField(max_length=100, unique=True)
+    device_name = models.CharField(max_length=200, default='Android Device')
+    last_backup_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.device_name} ({self.device_id})"
+
+class SyncedTransaction(models.Model):
+    """Cloud backup of an income or expense transaction captured or added on the device."""
+    device = models.ForeignKey(DeviceProfile, on_delete=models.CASCADE, related_name='transactions')
+    local_id = models.CharField(max_length=100) # Local SQLite ID
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    is_income = models.BooleanField(default=False)
+    category = models.CharField(max_length=100, default='General')
+    merchant = models.CharField(max_length=200, default='Payment')
+    source = models.CharField(max_length=50, default='manual') # 'notification', 'sms', 'screenshot', 'manual', 'ai_assistant'
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    account_ending = models.CharField(max_length=10, blank=True, null=True)
+    date = models.CharField(max_length=20)
+    time = models.CharField(max_length=20, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('device', 'local_id')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        kind = "INCOME" if self.is_income else "EXPENSE"
+        return f"[{kind}] ₹{self.amount} - {self.merchant} ({self.device.device_id[:8]})"

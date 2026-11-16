@@ -169,3 +169,121 @@ class SessionHistoryView(APIView):
             return Response(serializer.data)
         except ConversationSession.DoesNotExist:
             return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BackupPushView(APIView):
+    """
+    Device-based Cloud Sync:
+    Accepts transactions captured or added on the phone and stores them safely in SQLite.
+    """
+    def post(self, request):
+        device_id = request.data.get('device_id', '').strip()
+        if not device_id:
+            return Response({"error": "device_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        device_name = request.data.get('device_name', 'Android Device')
+        transactions_data = request.data.get('transactions', [])
+
+        from .models import DeviceProfile, SyncedTransaction
+        device, _ = DeviceProfile.objects.get_or_create(
+            device_id=device_id,
+            defaults={'device_name': device_name}
+        )
+        if device_name != device.device_name:
+            device.device_name = device_name
+            device.save(update_fields=['device_name'])
+
+        saved_count = 0
+        for item in transactions_data:
+            local_id = str(item.get('id') or item.get('local_id') or uuid.uuid4())
+            SyncedTransaction.objects.update_or_create(
+                device=device,
+                local_id=local_id,
+                defaults={
+                    'amount': item.get('amount', 0.0),
+                    'is_income': bool(item.get('is_income', False)),
+                    'category': item.get('category') or item.get('categoryId') or 'General',
+                    'merchant': item.get('merchant') or item.get('source') or 'Payment',
+                    'source': item.get('source_type') or item.get('source') or 'manual',
+                    'transaction_id': item.get('transaction_id') or item.get('txn_id'),
+                    'account_ending': item.get('account_ending'),
+                    'date': str(item.get('date', '')),
+                    'time': str(item.get('time', '')),
+                    'notes': item.get('notes', ''),
+                }
+            )
+            saved_count += 1
+
+        device.save() # triggers last_backup_at update
+
+        return Response({
+            "status": "success",
+            "device_id": device_id,
+            "synced_count": saved_count,
+            "last_backup_at": device.last_backup_at.isoformat(),
+        })
+
+class BackupPullView(APIView):
+    """Restore all transactions for a given device ID."""
+    def get(self, request, device_id):
+        from .models import DeviceProfile, SyncedTransaction
+        try:
+            device = DeviceProfile.objects.get(device_id=device_id)
+        except DeviceProfile.DoesNotExist:
+            return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        txns = device.transactions.all()
+        data = []
+        for t in txns:
+            data.append({
+                'id': t.local_id,
+                'amount': float(t.amount),
+                'is_income': t.is_income,
+                'category': t.category,
+                'merchant': t.merchant,
+                'source': t.source,
+                'transaction_id': t.transaction_id,
+                'account_ending': t.account_ending,
+                'date': t.date,
+                'time': t.time,
+                'notes': t.notes,
+            })
+
+        return Response({
+            "status": "success",
+            "device_id": device_id,
+            "device_name": device.device_name,
+            "total_count": len(data),
+            "last_backup_at": device.last_backup_at.isoformat(),
+            "transactions": data,
+        })
+
+class BackupStatsView(APIView):
+    """View summary statistics of backed up data."""
+    def get(self, request, device_id):
+        from .models import DeviceProfile
+        from django.db.models import Sum
+        try:
+            device = DeviceProfile.objects.get(device_id=device_id)
+        except DeviceProfile.DoesNotExist:
+            return Response({
+                "status": "not_found",
+                "device_id": device_id,
+                "total_count": 0,
+                "total_expense": 0.0,
+                "total_income": 0.0
+            })
+
+        total_count = device.transactions.count()
+        total_expense = device.transactions.filter(is_income=False).aggregate(s=Sum('amount'))['s'] or 0.0
+        total_income = device.transactions.filter(is_income=True).aggregate(s=Sum('amount'))['s'] or 0.0
+
+        return Response({
+            "status": "success",
+            "device_id": device_id,
+            "device_name": device.device_name,
+            "total_count": total_count,
+            "total_expense": float(total_expense),
+            "total_income": float(total_income),
+            "last_backup_at": device.last_backup_at.isoformat(),
+        })
