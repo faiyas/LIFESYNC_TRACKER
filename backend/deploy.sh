@@ -55,6 +55,7 @@ fi
 echo "🔄 Clearing old processes..."
 pkill -f "manage.py runserver" || true
 pkill -f "cloudflared tunnel" || true
+pkill -f "keep_alive" || true
 
 # 7. Start Django Server
 echo "🚀 Starting Django server on 0.0.0.0:8000..."
@@ -68,7 +69,12 @@ else
     echo "⚠️ Warning: Django server might still be starting, check django.log"
 fi
 
-# 8. Start Cloudflare Tunnel for free HTTPS URL
+# 8. Start Keep-Alive Heartbeat Daemon (Prevents 20-min VM sleep)
+echo "⚡ Starting Keep-Alive Heartbeat Daemon (runs every 10 min)..."
+chmod +x keep_alive.sh
+nohup ./keep_alive.sh > /dev/null 2>&1 &
+
+# 9. Start Cloudflare Tunnel for free HTTPS URL
 echo "🌐 Starting Cloudflare Public Tunnel..."
 nohup cloudflared tunnel --url http://127.0.0.1:8000 > cloudflared.log 2>&1 &
 sleep 4
