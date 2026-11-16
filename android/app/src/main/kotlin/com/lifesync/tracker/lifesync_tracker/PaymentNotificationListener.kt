@@ -15,7 +15,7 @@ class PaymentNotificationListener : NotificationListenerService() {
         private const val KEY_PENDING_NOTIFICATIONS = "pending_payment_notifications"
         private const val MAX_BUFFER_SIZE = 50
 
-        // Strict whitelist of financial & UPI payment apps
+        // Comprehensive list of UPI apps, Private & Public Banks, and Neo-Banks in India
         private val TARGET_PACKAGES = setOf(
             "com.google.android.apps.nbu.paisa.user", // Google Pay (Tez)
             "com.phonepe.app",                       // PhonePe
@@ -30,17 +30,46 @@ class PaymentNotificationListener : NotificationListenerService() {
             "com.snapwork.hdfc",                     // HDFC Bank
             "com.csam.icici.bank.imobile",           // ICICI iMobile
             "com.sbi.lotusintouch",                  // SBI Yono
-            "com.finvu.app"                          // Finvu / Account Aggregator
+            "money.jupiter",                         // Jupiter Neo-Bank
+            "co.epifi.gro",                          // Fi Money
+            "org.slice",                             // Slice
+            "com.indusind.indie",                    // IndusInd Indie
+            "com.bankofbaroda.mconnect",             // Bank of Baroda (bob World)
+            "com.canarabank.mobility",               // Canara Bank
+            "com.pnb.pnbone",                        // PNB ONE
+            "com.infrasofttech.uboi",                // Union Bank
+            "com.idfcfirstbank.optimus",             // IDFC FIRST Bank
+            "com.myairtelapp",                       // Airtel Payments Bank
+            "com.tatadigital.tcp",                   // Tata Neu
+            "com.postpe.app",                        // Postpe
+            "com.navi.app",                          // Navi
+            "com.fampay.in",                         // FamPay
+            "com.finvu.app"                          // Finvu Account Aggregator
         )
 
-        // Strict keywords: ONLY real completed transactions (debited, credited, paid, received)
+        // Comprehensive transactional keywords covering all Indian bank debit, credit & UPI patterns
         private val STRICT_TRANSACTION_KEYWORDS = listOf(
-            "debited", "debited from", "debited by", "debited for",
-            "credited", "credited to", "credited with", "amount credited",
+            // Debit & Expenses
+            "debited", "debited from", "debited by", "debited for", "debit of",
             "paid to", "paid successfully", "payment successful", "payment of", "you paid",
-            "received from", "money received", "payment received", "received payment",
-            "transferred to", "transferred from", "transfer successful",
-            "sent to", "upi ref", "utr:", "txn id"
+            "spent on", "spent at", "spent", "charged", "card charged",
+            "deducted", "autopay deducted", "autopay executed",
+            "withdrawn", "cash withdrawal", "atm withdrawal", "withdrawal of",
+            "transferred to", "transfer successful", "sent to",
+            "bill payment", "recharge of", "purchase of", "dr by", "dr of", "dr.",
+
+            // Credit & Income
+            "credited", "credited to", "credited with", "amount credited", "credit of",
+            "received from", "money received", "payment received", "received payment", "you received",
+            "transferred from", "transferred to your account",
+            "salary", "salary credit", "salary of",
+            "cashback", "cashback received", "cashback of", "cashback credited",
+            "refund", "refund received", "refund of", "refund credited",
+            "inward transfer", "neft inward", "neft credit", "imps inward", "imps credit", "rtgs",
+            "deposit", "deposit successful", "cr by", "cr of", "cr.",
+
+            // Identifiers
+            "upi ref", "utr:", "txn id", "transaction ref"
         )
 
         // Promotional blocklist: Reject marketing, ads, and sales
@@ -81,27 +110,21 @@ class PaymentNotificationListener : NotificationListenerService() {
                     }
                     result.add(map)
                 }
+                prefs.edit().putString(KEY_PENDING_NOTIFICATIONS, "[]").apply()
             } catch (_: Exception) {}
-
-            prefs.edit().remove(KEY_PENDING_NOTIFICATIONS).apply()
             return result
         }
 
-        fun savePendingNotification(context: Context, data: Map<String, Any>) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val jsonStr = prefs.getString(KEY_PENDING_NOTIFICATIONS, "[]") ?: "[]"
+        private fun savePendingNotification(context: Context, payload: Map<String, Any>) {
             try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val jsonStr = prefs.getString(KEY_PENDING_NOTIFICATIONS, "[]") ?: "[]"
                 val array = JSONArray(jsonStr)
-                val newObj = JSONObject(data)
-                array.put(newObj)
-
-                val trimmedArray = JSONArray()
-                val start = if (array.length() > MAX_BUFFER_SIZE) array.length() - MAX_BUFFER_SIZE else 0
-                for (i in start until array.length()) {
-                    trimmedArray.put(array.get(i))
+                if (array.length() >= MAX_BUFFER_SIZE) {
+                    array.remove(0)
                 }
-
-                prefs.edit().putString(KEY_PENDING_NOTIFICATIONS, trimmedArray.toString()).apply()
+                array.put(JSONObject(payload))
+                prefs.edit().putString(KEY_PENDING_NOTIFICATIONS, array.toString()).apply()
             } catch (_: Exception) {}
         }
     }
@@ -129,15 +152,17 @@ class PaymentNotificationListener : NotificationListenerService() {
         val isPromotional = PROMOTIONAL_BLOCKLIST.any { combinedContent.contains(it) }
         if (isPromotional) return
 
-        // 4. Must contain STRICT financial confirmation keyword (debited, credited, paid, received, etc.)
+        // 4. Must contain transaction confirmation keyword (debited, credited, spent, paid, received, etc.)
         val hasStrictTransactionKeyword = STRICT_TRANSACTION_KEYWORDS.any { combinedContent.contains(it) }
         if (!hasStrictTransactionKeyword) return
 
-        // 5. Must contain currency (₹, rs, inr)
+        // 5. Must contain currency (₹, rs, inr, dr, cr)
         val hasCurrency = combinedContent.contains("₹") ||
                 combinedContent.contains("rs.") ||
                 combinedContent.contains("rs ") ||
-                combinedContent.contains("inr")
+                combinedContent.contains("inr") ||
+                combinedContent.contains("dr") ||
+                combinedContent.contains("cr")
 
         if (!hasCurrency) return
 
@@ -154,6 +179,4 @@ class PaymentNotificationListener : NotificationListenerService() {
         onNotificationCaptured?.invoke(payload)
         savePendingNotification(applicationContext, payload)
     }
-
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {}
 }

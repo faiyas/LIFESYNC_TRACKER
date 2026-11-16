@@ -377,11 +377,28 @@ class PaymentParserService {
     final hasDebitWord = lower.contains('debited') ||
         lower.contains('paid to') ||
         lower.contains('paid successfully') ||
+        lower.contains('payment successful') ||
+        lower.contains('payment of') ||
         lower.contains('you paid') ||
         lower.contains('transferred from your account') ||
         lower.contains('transferred to') ||
         lower.contains('spent on') ||
-        lower.contains('withdrawn from');
+        lower.contains('spent at') ||
+        lower.contains('spent inr') ||
+        lower.contains('spent rs') ||
+        lower.contains('charged') ||
+        lower.contains('card charged') ||
+        lower.contains('deducted') ||
+        lower.contains('autopay') ||
+        lower.contains('purchase of') ||
+        lower.contains('bill payment') ||
+        lower.contains('withdrawn from') ||
+        lower.contains('cash withdrawal') ||
+        lower.contains('atm withdrawal') ||
+        lower.contains('dr by') ||
+        lower.contains('dr of') ||
+        lower.contains(' dr.') ||
+        lower.contains(' dr ');
 
     // 2. Explicit credit check
     final hasCreditWord = lower.contains('credited') ||
@@ -390,11 +407,21 @@ class PaymentParserService {
         lower.contains('payment received') ||
         lower.contains('you received') ||
         lower.contains('salary') ||
-        lower.contains('cashback received') ||
-        lower.contains('refund received') ||
+        lower.contains('salary credit') ||
+        lower.contains('cashback') ||
+        lower.contains('refund') ||
         lower.contains('inward remittance') ||
+        lower.contains('inward transfer') ||
+        lower.contains('neft credit') ||
+        lower.contains('imps credit') ||
+        lower.contains('rtgs') ||
         lower.contains('amount credited') ||
-        lower.contains('deposit successful');
+        lower.contains('deposit successful') ||
+        lower.contains('deposit of') ||
+        lower.contains('cr by') ||
+        lower.contains('cr of') ||
+        lower.contains(' cr.') ||
+        lower.contains(' cr ');
 
     if (hasCreditWord && !hasDebitWord) {
       return true;
@@ -622,6 +649,22 @@ class PaymentParserService {
           if (val != null && val > 0 && !_isDateOrTimeOrAccount(cleanText, raw) && !_isPhoneNumberOrContact(cleanText, raw)) {
             return _crossValidateMisreadRupee(val, cleanText);
           }
+        }
+      }
+    }
+
+    // Priority 2B: Postfix currency (500 INR, 250 Rs, 1200 ₹) & Action-adjacent amount
+    final postfixAndActionRegex = RegExp(
+      r'(?:([0-9]+(?:,[0-9]+)*(?:\.[0-9]{1,2})?)\s*(?:[\u20B9₹]|Rs\.?|INR)|(?:debited with|debited by|spent|withdrawn|credited with|credited by|payment of|purchase of|charge of|amount of)\s*(?:[\u20B9₹]|Rs\.?|INR)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]{1,2})?))',
+      caseSensitive: false,
+    );
+    final postfixMatches = postfixAndActionRegex.allMatches(cleanText);
+    for (final pm in postfixMatches) {
+      final raw = (pm.group(1) ?? pm.group(2))?.replaceAll(',', '');
+      if (raw != null) {
+        final val = double.tryParse(raw);
+        if (val != null && val > 0 && !_isDateOrTimeOrAccount(cleanText, raw) && !_isPhoneNumberOrContact(cleanText, raw)) {
+          return _crossValidateMisreadRupee(val, cleanText);
         }
       }
     }

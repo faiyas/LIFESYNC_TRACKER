@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/detected_payment.dart';
 import '../services/auto_payment_manager.dart';
+import '../services/cloud_backup_service.dart';
 
 class AutoPaymentDashboardScreen extends StatefulWidget {
   const AutoPaymentDashboardScreen({super.key});
@@ -71,6 +72,41 @@ class _AutoPaymentDashboardScreenState extends State<AutoPaymentDashboardScreen>
               ? '✅ Synced and processed $count new payment transaction(s)!'
               : '✅ Sync complete: All channels are up to date. No new unlogged payments.'),
           backgroundColor: Colors.indigo,
+        ),
+      );
+    }
+  }
+
+  bool _isCatchUpScanning = false;
+  bool _isBackingUp = false;
+
+  Future<void> _runCatchUpScan() async {
+    setState(() => _isCatchUpScanning = true);
+    final count = await _manager.scanCatchUpTransactions(hours: 48);
+    setState(() => _isCatchUpScanning = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(count > 0
+              ? '⚡ Found and captured $count missed transaction(s) from past 48 hours!'
+              : '⚡ Catch-Up Scan Complete: All bank transactions from past 48 hours are already logged.'),
+          backgroundColor: Colors.teal,
+        ),
+      );
+    }
+  }
+
+  Future<void> _runCloudBackup() async {
+    setState(() => _isBackingUp = true);
+    final res = await CloudBackupService.instance.backupAllLocalData();
+    setState(() => _isBackingUp = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['success'] == true
+              ? '☁️ Successfully backed up ${res['synced_count']} transaction(s) to Instabox!'
+              : '⚠️ Cloud backup error: ${res['error'] ?? "Failed"}'),
+          backgroundColor: res['success'] == true ? Colors.green : Colors.red,
         ),
       );
     }
@@ -245,6 +281,10 @@ class _AutoPaymentDashboardScreenState extends State<AutoPaymentDashboardScreen>
 
             // Failover Channels Status Card
             _buildChannelsCard(isDark),
+            const SizedBox(height: 16),
+
+            // Catch-Up Scanner & Cloud Backup Actions
+            _buildCatchUpAndBackupCard(isDark),
             const SizedBox(height: 16),
 
             // Deduplication Engine Card
@@ -486,6 +526,70 @@ class _AutoPaymentDashboardScreenState extends State<AutoPaymentDashboardScreen>
           onChanged: onToggle,
         ),
       ],
+    );
+  }
+
+  Widget _buildCatchUpAndBackupCard(bool isDark) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.bolt_rounded, color: Colors.teal, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Missed Payments & Cloud Backup',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'If a payment wasn\'t captured while your phone was asleep or from a bank card swipe, run a catch-up scan or backup all records to your Instabox cloud.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    icon: _isCatchUpScanning
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.history_toggle_off, size: 16),
+                    label: const Text('Catch-Up SMS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: _isCatchUpScanning ? null : _runCatchUpScan,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    icon: _isBackingUp
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.cloud_upload_outlined, size: 16),
+                    label: const Text('Cloud Backup', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: _isBackingUp ? null : _runCloudBackup,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

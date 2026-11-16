@@ -12,6 +12,7 @@ import 'auto_payment_channel.dart';
 import 'payment_deduplication_engine.dart';
 import 'payment_ocr_service.dart';
 import 'payment_parser_service.dart';
+import 'cloud_backup_service.dart';
 
 class AutoCapturedEvent {
   final String id;
@@ -244,6 +245,31 @@ class AutoPaymentManager with ChangeNotifier {
     return totalProcessed;
   }
 
+  /// Retroactively scans the last 24-48 hours of SMS messages to catch any
+  /// transactions that arrived while the device was asleep or offline.
+  Future<int> scanCatchUpTransactions({int hours = 48}) async {
+    int newCaptured = 0;
+    try {
+      final hasSmsPerm = await _channel.checkSmsPermission();
+      if (!hasSmsPerm) return 0;
+
+      final sinceMs = DateTime.now().subtract(Duration(hours: hours)).millisecondsSinceEpoch;
+      final messages = await _channel.readRecentSms(
+        sinceTimestamp: sinceMs,
+        limit: 50,
+      );
+
+      for (final sms in messages) {
+        final processed = await _processRawSms(sms);
+        if (processed) newCaptured++;
+      }
+    } catch (e) {
+      debugPrint('Error scanning catch-up SMS: $e');
+    }
+    notifyListeners();
+    return newCaptured;
+  }
+
   // Live event handlers
   Future<void> _handleLiveNotification(Map<String, dynamic> notif) async {
     if (!_isAutoTrackingEnabled || !_isNotificationEnabled) return;
@@ -459,6 +485,7 @@ class AutoPaymentManager with ChangeNotifier {
         notesBuilder.write(' Items: ${payment.itemSummary}');
       }
 
+      String? insertedId;
       if (payment.isIncome) {
         final income = Income(
           profileId: activeProfile,
@@ -472,7 +499,7 @@ class AutoPaymentManager with ChangeNotifier {
         );
         await db.insert('income', income.toMap());
         AppNotificationScheduler.instance.scheduleDailyFinancialSummary();
-        return income.id;
+        insertedId = income.id;
       } else {
         final expense = Expense(
           profileId: activeProfile,
@@ -488,8 +515,13 @@ class AutoPaymentManager with ChangeNotifier {
         );
         await db.insert('expenses', expense.toMap());
         AppNotificationScheduler.instance.scheduleDailyFinancialSummary();
-        return expense.id;
+        insertedId = expense.id;
       }
+
+      // Automatically backup to cloud in the background
+      CloudBackupService.instance.backupSinglePayment(payment);
+
+      return insertedId;
     } catch (e) {
       debugPrint('Error saving auto payment to database: $e');
       return null;
